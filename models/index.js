@@ -2,7 +2,9 @@ const sequelize = require('../config/database');
 const Usuario = require('./Usuario');
 const Platillo = require('./Platillo');
 const Categoria = require('./Categoria');
-const PlatilloCategoria = require('./PlatilloCategoria')
+const PlatilloCategoria = require('./PlatilloCategoria');
+const Restaurante = require('./Restaurante');
+const RestauranteCategoria = require('./RestauranteCategoria');
 
 // Relaciones
 
@@ -16,6 +18,15 @@ Categoria.belongsToMany(Platillo, {
   foreignKey: 'categoria_id'
 });
 
+Restaurante.belongsToMany(Categoria, {
+  through: RestauranteCategoria,
+  foreignKey: 'restaurante_id'
+});
+
+Categoria.belongsToMany(Restaurante, {
+  through: RestauranteCategoria,
+  foreignKey: 'categoria_id'
+});
 
 
 module.exports = {
@@ -23,5 +34,7 @@ module.exports = {
   Usuario,
   Platillo,
   Categoria,
-  PlatilloCategoria
+  PlatilloCategoria,
+  Restaurante,
+  RestauranteCategoria
 };

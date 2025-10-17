@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Platillo, Categoria } = require('../models');
+const { Restaurante, Categoria } = require('../models');
 
 
 exports.buscarYFiltrar = async (req, res) => {
@@ -20,9 +20,9 @@ exports.buscarYFiltrar = async (req, res) => {
   }
 
   try {
-    const platillos = await Platillo.findAll({ where, include });
-    res.json(platillos);
+    const restaurantes = await Restaurante.findAll({ where, include });
+    res.json(restaurantes);
   } catch (error) {
-    res.status(500).json({ error: 'Error al buscar o filtrar platillos' });
+    res.status(500).json({ error: 'Error al buscar o filtrar restaurantes' });
   }
 };
