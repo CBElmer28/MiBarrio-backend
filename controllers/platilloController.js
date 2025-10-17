@@ -1,28 +1,43 @@
-const { Op } = require('sequelize');
-const { Platillo, Categoria } = require('../models');
+const { Platillo, Restaurante, Categoria } = require('../models');
 
-
-exports.buscarYFiltrar = async (req, res) => {
-  const { nombre, categoria } = req.query;
-
-  const where = {};
-  if (nombre) {
-    where.nombre = { [Op.like]: `%${nombre}%` };
-  }
-
-  const include = [];
-  if (categoria) {
-    include.push({
-      model: Categoria,
-      where: { nombre: categoria },
-      through: { attributes: [] }
-    });
-  }
-
+exports.obtenerPlatillos = async (req, res) => {
   try {
-    const platillos = await Platillo.findAll({ where, include });
+    const platillos = await Platillo.findAll({
+      include: [
+        { model: Restaurante,as:'restaurante', attributes: ['id', 'nombre', 'imagen', 'rating'] },
+        { model: Categoria, attributes: ['nombre'] }
+      ]
+    });
     res.json(platillos);
   } catch (error) {
-    res.status(500).json({ error: 'Error al buscar o filtrar platillos' });
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.obtenerPorCategoria = async (req, res) => {
+  const { categoria } = req.params;
+  try {
+    const platillos = await Platillo.findAll({
+      include: [
+        { model: Categoria, where: { nombre: categoria }, attributes: [] },
+        { model: Restaurante, as:'restaurante',attributes: ['nombre'] }
+      ]
+    });
+    res.json(platillos);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.obtenerPorRestaurante = async (req, res) => {
+  const { restauranteId } = req.params;
+  try {
+    const platillos = await Platillo.findAll({
+      where: { restaurante_id: restauranteId },
+      include: [{ model: Categoria, attributes: ['nombre'] }]
+    });
+    res.json(platillos);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };

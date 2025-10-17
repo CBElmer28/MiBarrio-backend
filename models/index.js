@@ -28,6 +28,17 @@ Categoria.belongsToMany(Restaurante, {
   foreignKey: 'categoria_id'
 });
 
+Restaurante.hasMany(Platillo, { 
+  foreignKey: 'restaurante_id', 
+  as: 'platillos' 
+});
+
+// Un platillo pertenece a un restaurante
+Platillo.belongsTo(Restaurante, { 
+  foreignKey: 'restaurante_id', 
+  as: 'restaurante' 
+});
+
 
 module.exports = {
   sequelize,

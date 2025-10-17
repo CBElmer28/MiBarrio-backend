@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
+const platillo = require('../models/index')
 
 const Restaurante = sequelize.define('Restaurante', {
   nombre: DataTypes.STRING,

@@ -8,7 +8,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Importar rutas
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/platillos', require('./routes/Platillos'));
 app.use('/api/restaurantes', require('./routes/Restaurantes'));
