@@ -33,7 +33,6 @@ Restaurante.hasMany(Platillo, {
   as: 'platillos' 
 });
 
-// Un platillo pertenece a un restaurante
 Platillo.belongsTo(Restaurante, { 
   foreignKey: 'restaurante_id', 
   as: 'restaurante' 
