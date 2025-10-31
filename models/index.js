@@ -5,6 +5,7 @@ const Categoria = require('./Categoria');
 const PlatilloCategoria = require('./PlatilloCategoria');
 const Restaurante = require('./Restaurante');
 const RestauranteCategoria = require('./RestauranteCategoria');
+const Favorito = require('./Favorito');
 
 // Relaciones
 
@@ -38,6 +39,26 @@ Platillo.belongsTo(Restaurante, {
   as: 'restaurante' 
 });
 
+Usuario.hasMany(Favorito, {
+    foreignKey: 'cliente_id',
+    as: 'favoritos'
+});
+
+Favorito.belongsTo(Usuario, {
+    foreignKey: 'cliente_id',
+    as: 'cliente'
+});
+
+Platillo.hasMany(Favorito, {
+    foreignKey: 'platillo_id',
+    as: 'favoritos'
+});
+
+Favorito.belongsTo(Platillo, {
+    foreignKey: 'platillo_id',
+    as: 'platillo'
+});
+
 
 module.exports = {
   sequelize,
@@ -46,5 +67,6 @@ module.exports = {
   Categoria,
   PlatilloCategoria,
   Restaurante,
-  RestauranteCategoria
+  RestauranteCategoria,
+  Favorito
 };
