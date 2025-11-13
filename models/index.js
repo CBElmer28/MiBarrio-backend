@@ -1,5 +1,7 @@
 const sequelize = require('../config/database');
 const Usuario = require('./Usuario');
+const MetodoPago = require('./MetodoPago');
+const MetodoPagoUsuario = require('./MetodoPagoUsuario');
 const Platillo = require('./Platillo');
 const Categoria = require('./Categoria');
 const PlatilloCategoria = require('./PlatilloCategoria');
@@ -44,6 +46,23 @@ Usuario.hasMany(Favorito, {
     as: 'favoritos'
 });
 
+Usuario.belongsToMany(MetodoPago, {
+    through: MetodoPagoUsuario,
+    foreignKey: 'usuario_id',
+    as: 'metodos_pago'
+});
+
+MetodoPago.belongsToMany(Usuario, {
+    through: MetodoPagoUsuario,
+    foreignKey: 'metodo_pago_id',
+    as: 'usuarios'
+});
+
+MetodoPagoUsuario.belongsTo(MetodoPago, {
+    foreignKey: 'metodo_pago_id',
+    as: 'metodo_pago'
+});
+
 Favorito.belongsTo(Usuario, {
     foreignKey: 'cliente_id',
     as: 'cliente'
@@ -68,5 +87,7 @@ module.exports = {
   PlatilloCategoria,
   Restaurante,
   RestauranteCategoria,
-  Favorito
+  Favorito,
+  MetodoPago,
+  MetodoPagoUsuario
 };
