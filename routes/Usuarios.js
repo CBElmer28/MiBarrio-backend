@@ -1,10 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const authCocinero = require('../middleware/auth');
-const usuarioController = require('../controllers/usuarioController');
 
+const auth = require('../middleware/authMiddleware');           // verifica token
+const { authCocinero } = require('../middleware/auth'); // solo cocineros
 
-router.get('/repartidores', auth, authCocinero, usuarioController.listRepartidores);
-router.put('/repartidores/:id', auth, authCocinero, usuarioController.updateRepartidor);
+const usuarioController = require('../controllers/usuariosController');
+
+// Crear repartidor
+router.post('/repartidores', auth, authCocinero, usuarioController.create);
+
+// Listar repartidores
+router.get('/repartidores', auth, authCocinero, usuarioController.list);
+
+// Actualizar repartidor
+router.put('/repartidores/:id', auth, authCocinero, usuarioController.update);
+
+// Eliminar repartidor
+router.delete('/repartidores/:id', auth, authCocinero, usuarioController.delete);
 
 module.exports = router;

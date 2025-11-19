@@ -15,6 +15,8 @@ app.use('/api/platillos', require('./routes/Platillos'));
 app.use('/api/restaurantes', require('./routes/Restaurantes'));
 app.use('/api/favoritos', require('./routes/favoritos'));
 app.use('/api/metodos-pago', require('./routes/MetodosPagos'));
+app.use('/api/orden', require('./routes/Orden'));
+app.use('/api/usuarios', require('./routes/Usuarios'));
 
 const PORT = process.env.PORT || 3000;
 

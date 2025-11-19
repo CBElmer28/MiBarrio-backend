@@ -41,7 +41,7 @@ exports.update = async (req, res) => {
       nombre: req.body.nombre,
       imagen: req.body.imagen,
       delivery_cost: req.body.delivery_cost,
-      tiempo_entrega: req.body.tiempo_entrega
+      tiempo_entrega: req.body.tiempo_entrega,
     });
 
     res.json({ message: "Restaurante actualizado", restaurante });
