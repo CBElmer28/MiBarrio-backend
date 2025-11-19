@@ -16,7 +16,8 @@ const Usuario = sequelize.define('Usuario', {
     allowNull: false
   },
   tipo: {
-    type: DataTypes.ENUM('cliente', 'cocinero'),
+    type: DataTypes.ENUM('cliente', 'cocinero','repartidor'),
+    defaultValue: 'cliente',
     allowNull: false
   },
   descripcion: {
@@ -25,6 +26,10 @@ const Usuario = sequelize.define('Usuario', {
   },
   imagen_perfil: {
     type: DataTypes.STRING,
+    allowNull: true
+  },
+  restaurante_id: {
+    type: DataTypes.INTEGER,
     allowNull: true
   }
 });
