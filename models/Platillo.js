@@ -1,6 +1,5 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
-const  Restaurante  = require('../models/index.js');
 
 const Platillo = sequelize.define('Platillo', {
   id: {
@@ -16,10 +15,6 @@ const Platillo = sequelize.define('Platillo', {
     type: DataTypes.DECIMAL(2, 1),
     allowNull: true
   },
-  tipo: {
-    type: DataTypes.STRING(50),
-    allowNull: true
-  },
   imagen: {
     type: DataTypes.STRING(255),
     allowNull: true
@@ -30,10 +25,7 @@ const Platillo = sequelize.define('Platillo', {
   },
   restaurante_id: {
     type: DataTypes.INTEGER,
-    references: {
-      model: 'Restaurantes',
-      key: 'id'
-    }
+    allowNull: true
   }
 }, {
   tableName: 'Platillos',

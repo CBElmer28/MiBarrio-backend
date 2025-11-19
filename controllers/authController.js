@@ -1,6 +1,7 @@
 const Usuario = require('../models/Usuario');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { Restaurante } = require('../models');
 
 exports.registrar = async (req, res) => {
     try {
@@ -52,18 +53,42 @@ exports.registrar = async (req, res) => {
         res.status(500).json({ error: error.message || 'Error al registrar usuario' });
     }
 },
+
 exports.login = async (req, res) => {
   try {
     const { email, contraseña } = req.body;
+
     const usuario = await Usuario.findOne({ where: { email } });
     if (!usuario) return res.status(404).json({ error: 'Usuario no encontrado' });
 
     const valido = await bcrypt.compare(contraseña, usuario.contraseña);
     if (!valido) return res.status(401).json({ error: 'Contraseña incorrecta' });
 
-    const token = jwt.sign({ id: usuario.id, tipo: usuario.tipo }, process.env.JWT_SECRET, { expiresIn: '1d' });
-    res.json({ token, usuario });
+    let restaurante = null;
+
+    // Cocinero y repartidor tienen restaurante
+    if (usuario.tipo === 'cocinero' || usuario.tipo === 'repartidor') {
+      restaurante = await Restaurante.findByPk(usuario.restaurante_id);
+    }
+
+    const token = jwt.sign(
+      { id: usuario.id, tipo: usuario.tipo },
+      process.env.JWT_SECRET,
+      { expiresIn: '1d' }
+    );
+
+    const usuarioLimpio = {
+      id: usuario.id,
+      nombre: usuario.nombre,
+      email: usuario.email,
+      tipo: usuario.tipo,
+      restaurante_id: usuario.restaurante_id || null
+    };
+
+    res.json({ token, usuario: usuarioLimpio, restaurante });
+
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: 'Error al iniciar sesión' });
-  };
+  }
 };
