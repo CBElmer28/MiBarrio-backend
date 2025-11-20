@@ -1,4 +1,4 @@
-const { Orden, OrdenDetalle, Usuario } = require('../models');
+const { Orden, OrdenDetalle, Usuario, Platillo } = require('../models');
 
 exports.crearOrden = async (req, res) => {
   const { usuario_id, restaurante_id, items } = req.body;
@@ -120,9 +120,20 @@ exports.cancelarOrden = async (req, res) => {
 
 exports.misOrdenes = async (req, res) => {
   const ordenes = await Orden.findAll({
-    where: { usuario_id: req.user.id },
-    include: ["OrdenDetalles", "Restaurante"]
-  });
+  where: { cliente_id: req.user.id },
+  include: [
+    {
+      model: OrdenDetalle,
+      as: "detalles",
+      include: [
+        {
+          model: Platillo,
+          as: "platillo"
+        }
+      ]
+    }
+  ]
+});
 
   res.json(ordenes);
 };
