@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const {authCliente,authCocinero,authRepartidor} = require('../middleware/auth');
 const ordenController = require('../controllers/ordenController');
+const authMiddleware = require('../middleware/authMiddleware');
+
+router.use(authMiddleware);
 
 router.get('/mis-ordenes', authCliente, ordenController.misOrdenes);
 router.post('/', authCliente, ordenController.crearOrden);
