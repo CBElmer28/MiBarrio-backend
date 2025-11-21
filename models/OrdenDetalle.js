@@ -20,6 +20,9 @@ const OrdenDetalle = sequelize.define("OrdenDetalle", {
     type: DataTypes.FLOAT,
     allowNull: false
   }
+}, {
+  tableName: 'orden_detalle',
+  freezeTableName: true
 });
 
 module.exports = OrdenDetalle;

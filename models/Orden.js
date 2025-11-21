@@ -6,9 +6,14 @@ const Orden = sequelize.define("Orden", {
   cliente_id: DataTypes.INTEGER,
   restaurante_id: DataTypes.INTEGER,
   repartidor_id: DataTypes.INTEGER,
+  direccion_entrega: { type: DataTypes.STRING, allowNull: false},
   estado: DataTypes.STRING,
   total: DataTypes.FLOAT
-});
+},{
+  freezeTableName: true
+}
+
+);
 
 module.exports = Orden;
 

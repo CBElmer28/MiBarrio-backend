@@ -1,23 +1,42 @@
-const { Orden, OrdenDetalle, Usuario, Platillo } = require('../models');
+const { Orden, OrdenDetalle, Usuario, Platillo, Restaurante } = require('../models');
 
 exports.crearOrden = async (req, res) => {
-  const { usuario_id, restaurante_id, items } = req.body;
+  const { cliente_id, restaurante_id, direccion_id, items } = req.body;
 
   try {
-    // Crear orden base
+    // Obtener dirección de la tabla Direcciones
+    let direccion_entrega = null;
+
+    if (direccion_id) {
+      const Direccion = require('../models/Direccion'); // si tienes este modelo
+      const dir = await Direccion.findByPk(direccion_id);
+
+      if (!dir || dir.usuario_id !== cliente_id) {
+        return res.status(400).json({ error: "Dirección inválida" });
+      }
+
+      direccion_entrega = dir.direccion;
+    }
+
+    if (!direccion_entrega) {
+      return res.status(400).json({ error: "Debes elegir una dirección de entrega" });
+    }
+
+    // Crear orden
     const orden = await Orden.create({
-      usuario_id,
+      cliente_id,
       restaurante_id,
       repartidor_id: null,
+      direccion_entrega,
       estado: "pendiente",
-      total: 0 // se calcula abajo
+      total: 0
     });
 
-    // Crear los detalles
+    // Crear detalles
     const detalles = await Promise.all(
       items.map(async item => {
-        // Obtener precio del platillo
         const platillo = await Platillo.findByPk(item.platillo_id);
+
         return {
           orden_id: orden.id,
           platillo_id: item.platillo_id,
@@ -29,7 +48,7 @@ exports.crearOrden = async (req, res) => {
 
     await OrdenDetalle.bulkCreate(detalles);
 
-    // Calcular total final
+    // Calcular total
     const total = detalles.reduce((sum, d) => sum + d.subtotal, 0);
     await orden.update({ total });
 
@@ -43,18 +62,49 @@ exports.crearOrden = async (req, res) => {
   }
 };
 
-exports.listarOrdenes = async (req, res) => {
+
+exports.misOrdenes = async (req, res) => {
   const ordenes = await Orden.findAll({
-    where: { restaurante_id: req.user.restaurante_id },
-    include: ["Usuario", "Repartidor", "OrdenDetalles"]
+    where: { cliente_id: req.user.id },
+    include: [
+      {
+        model: OrdenDetalle,
+        as: "detalles",
+        include: [
+          {
+            model: Platillo,
+            as: "platillo"
+          }
+        ]
+      }
+    ]
   });
 
   res.json(ordenes);
 };
 
+
+exports.listarOrdenes = async (req, res) => {
+  const ordenes = await Orden.findAll({
+    where: { restaurante_id: req.user.restaurante_id },
+    include: [
+      { model: Usuario, as: "cliente" },
+      { model: Usuario, as: "repartidor" },
+      { model: OrdenDetalle, as: "detalles" }
+    ]
+  });
+
+  res.json(ordenes);
+};
+
+
 exports.verOrden = async (req, res) => {
   const orden = await Orden.findByPk(req.params.id, {
-    include: ["Usuario", "Repartidor", "OrdenDetalles"]
+    include: [
+      { model: Usuario, as: "cliente" },
+      { model: Usuario, as: "repartidor" },
+      { model: OrdenDetalle, as: "detalles" }
+    ]
   });
 
   if (!orden || orden.restaurante_id !== req.user.restaurante_id)
@@ -63,20 +113,19 @@ exports.verOrden = async (req, res) => {
   res.json(orden);
 };
 
+
 exports.asignarRepartidor = async (req, res) => {
   const orden = await Orden.findByPk(req.params.id);
 
   if (!orden)
     return res.status(404).json({ error: "Orden no encontrada" });
 
-  // Validar que la orden pertenece al restaurante del cocinero
   if (orden.restaurante_id !== req.user.restaurante_id)
     return res.status(403).json({ error: "No puedes editar esta orden" });
 
   const repartidor = await Usuario.findByPk(req.body.repartidor_id);
 
-  if (!repartidor || repartidor.tipo !== "repartidor" ||
-      repartidor.restaurante_id !== req.user.restaurante_id)
+  if (!repartidor || repartidor.tipo !== "repartidor")
     return res.status(400).json({ error: "Repartidor inválido" });
 
   await orden.update({
@@ -86,6 +135,7 @@ exports.asignarRepartidor = async (req, res) => {
 
   res.json({ message: "Repartidor asignado", orden });
 };
+
 
 exports.cambiarEstado = async (req, res) => {
   const { estado } = req.body;
@@ -104,48 +154,20 @@ exports.cambiarEstado = async (req, res) => {
   res.json({ message: "Estado actualizado", orden });
 };
 
-exports.cancelarOrden = async (req, res) => {
-  const orden = await Orden.findByPk(req.params.id);
-
-  if (!orden || orden.restaurante_id !== req.user.restaurante_id)
-    return res.status(403).json({ error: "No puedes cancelar esta orden" });
-
-  if (orden.estado === "entregada")
-    return res.status(400).json({ error: "No puedes cancelar una orden entregada" });
-
-  await orden.update({ estado: "cancelada" });
-
-  res.json({ message: "Orden cancelada", orden });
-};
-
-exports.misOrdenes = async (req, res) => {
-  const ordenes = await Orden.findAll({
-  where: { cliente_id: req.user.id },
-  include: [
-    {
-      model: OrdenDetalle,
-      as: "detalles",
-      include: [
-        {
-          model: Platillo,
-          as: "platillo"
-        }
-      ]
-    }
-  ]
-});
-
-  res.json(ordenes);
-};
 
 exports.ordenesAsignadas = async (req, res) => {
   const ordenes = await Orden.findAll({
     where: { repartidor_id: req.user.id },
-    include: ["Usuario", "OrdenDetalles", "Restaurante"]
+    include: [
+      { model: Usuario, as: "cliente" },
+      { model: OrdenDetalle, as: "detalles" },
+      { model: Restaurante, as: "restaurante" }
+    ]
   });
 
   res.json(ordenes);
 };
+
 
 exports.marcarEntregada = async (req, res) => {
   const orden = await Orden.findByPk(req.params.id);
