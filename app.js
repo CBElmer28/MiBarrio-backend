@@ -4,15 +4,19 @@ const cors = require('cors');
 require('dotenv').config();
 const sequelize = require('./config/database');
 const authRoutes = require('./routes/auth');
+const MetodosPagos = require('./routes/MetodosPagos');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Importar rutas
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/platillos', require('./routes/Platillos'));
 app.use('/api/restaurantes', require('./routes/Restaurantes'));
+app.use('/api/favoritos', require('./routes/favoritos'));
+app.use('/api/metodos-pago', require('./routes/MetodosPagos'));
+app.use('/api/orden', require('./routes/Orden'));
+app.use('/api/usuarios', require('./routes/Usuarios'));
 
 const PORT = process.env.PORT || 3000;
 

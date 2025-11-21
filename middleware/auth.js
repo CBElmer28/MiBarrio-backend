@@ -1,0 +1,20 @@
+exports.authCliente = (req, res, next) => {
+    if (!req.user || req.user.tipo !== 'cliente') {
+        return res.status(403).json({ error: 'Acceso no autorizado: solo cliente' });
+    }
+    next();
+};
+
+exports.authCocinero = (req, res, next) => {
+    if (!req.user || req.user.tipo !== 'cocinero') {
+        return res.status(403).json({ error: 'Acceso no autorizado: solo cocinero' });
+    }
+    next();
+};
+
+exports.authRepartidor = (req, res, next) => {
+    if (!req.user || req.user.tipo !== 'repartidor') {
+        return res.status(403).json({ error: 'Acceso no autorizado: solo repartidor' });
+    }
+    next();
+};
