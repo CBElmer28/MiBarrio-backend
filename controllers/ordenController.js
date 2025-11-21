@@ -182,3 +182,33 @@ exports.marcarEntregada = async (req, res) => {
 
   res.json({ message: "Orden entregada", orden });
 };
+
+// ... (código anterior) ...
+
+exports.cancelarOrden = async (req, res) => {
+  try {
+    const orden = await Orden.findByPk(req.params.id);
+
+    if (!orden) 
+      return res.status(404).json({ error: "Orden no encontrada" });
+
+    // Verificar que la orden pertenezca al restaurante del cocinero
+    if (orden.restaurante_id !== req.user.restaurante_id)
+      return res.status(403).json({ error: "No tienes permiso para cancelar esta orden" });
+
+    // No permitir cancelar si ya se entregó
+    if (orden.estado === "entregada")
+      return res.status(400).json({ error: "No puedes cancelar una orden ya entregada" });
+
+    // Opción A: Marcarla como cancelada (Recomendado para mantener historial)
+    await orden.update({ estado: "cancelada" });
+
+    // Opción B: Borrarla físicamente (Descomenta si prefieres esto)
+    // await orden.destroy();
+
+    res.json({ message: "Orden cancelada correctamente", orden });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
