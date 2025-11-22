@@ -14,7 +14,7 @@ Este repositorio contiene el servidor API y la lógica de negocio de **MiBarrio*
 
 ---
 
-## 📖 Resumen y Alcance del Sistema
+## Resumen y Alcance del Sistema
 
 El backend implementa una arquitectura **MVC (Modelo-Vista-Controlador)** robusta sobre Node.js, encargada de orquestar el flujo de datos entre la base de datos, los clientes móviles y los servicios externos.
 
