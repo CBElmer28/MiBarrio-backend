@@ -3,148 +3,188 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const { sequelize, Orden, Usuario } = require('./models'); // ajustar ruta
 const { Server } = require('socket.io');
 
-const app = express();
-app.use(express.json());
-app.use(cors());
+require('dotenv').config();
 
+// Importar modelos y configuración de DB
+const { sequelize, Orden, Usuario } = require('./models');
+
+// --- NUEVO: Importar servicio de Google Maps ---
+const { getCoordinatesFromAddress } = require('./services/googleMapsService');
+
+// Inicializar App
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// --- 1. RUTAS DE LA API ---
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/platillos', require('./routes/Platillos'));
+app.use('/api/restaurantes', require('./routes/Restaurantes'));
+app.use('/api/favoritos', require('./routes/favoritos'));
+app.use('/api/metodos-pago', require('./routes/MetodosPagos'));
+app.use('/api/orden', require('./routes/Orden'));
+app.use('/api/usuarios', require('./routes/Usuarios'));
+app.use('/api/direcciones', require('./routes/Direcciones'));
+
+// --- 2. CONFIGURACIÓN DEL SERVIDOR HTTP Y SOCKET.IO ---
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: '*' }
+    cors: { origin: '*' } // Ajustar en producción según tus necesidades
 });
 
-// --- Socket auth middleware (token from query or auth header) ---
+// --- 3. MIDDLEWARE DE AUTENTICACIÓN SOCKET ---
 io.use(async (socket, next) => {
-  try {
-    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
-    if (!token) return next(new Error('Auth error'));
+    try {
+        const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+        if (!token) return next(new Error('Autenticación requerida'));
 
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    // attach user info
-    socket.user = payload; // { id, tipo, ... }
-    // optionally load user from DB
-    const user = await Usuario.findByPk(payload.id);
-    if (!user) return next(new Error('User not found'));
-    socket.userModel = user;
-    return next();
-  } catch (err) {
-    console.error('Socket auth err:', err);
-    return next(new Error('Auth error'));
-  }
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        socket.user = payload;
+
+        // Verificar existencia en BD para asegurar que el usuario es válido
+        const user = await Usuario.findByPk(payload.id);
+        if (!user) return next(new Error('Usuario no encontrado'));
+
+        socket.userModel = user;
+        return next();
+    } catch (err) {
+        console.error('Error de auth en socket:', err.message);
+        return next(new Error('Error de autenticación'));
+    }
 });
 
-// --- Socket events ---
+// --- 4. EVENTOS DE SOCKET ---
 io.on('connection', (socket) => {
-  const user = socket.userModel;
-  console.log('Socket connected', user.id, user.tipo);
+    const user = socket.userModel;
+    console.log(`Usuario conectado: ${user.id} (${user.tipo})`);
 
-  // join personal room for private events
-  socket.join(`user:${user.id}`);
+    // Unirse a sala personal (para notificaciones privadas)
+    socket.join(`user:${user.id}`);
 
-  // clients (customer) will join order room to receive driver's locations:
-  // socket.emit join: { orderId }
-  socket.on('join_order', ({ orderId }) => {
-    if (!orderId) return;
-    socket.join(`order:${orderId}`);
-    console.log(`User ${user.id} joined order:${orderId}`);
-  });
+    // CLIENTE: Unirse a la sala de la orden para escuchar ubicación del repartidor
+    socket.on('join_order', ({ orderId }) => {
+        if (!orderId) return;
+        socket.join(`order:${orderId}`);
+        console.log(`Usuario ${user.id} se unió a la orden: ${orderId}`);
+    });
 
-  // Repartidor: start tracking for an order
-  // payload { orderId }
-  socket.on('start_tracking', ({ orderId }) => {
-    if (user.tipo !== 'repartidor') return socket.emit('error', 'Only repartidor can start tracking');
-    // join order room as driver too if wanted
-    socket.join(`order:${orderId}`);
-    // notify clients in order room that driver started (optional)
-    io.to(`order:${orderId}`).emit('orden:tracking_started', { orderId, repartidorId: user.id });
-  });
+    // REPARTIDOR: Iniciar tracking (Aquí ocurre la magia de Geocoding)
+    socket.on('start_tracking', async ({ orderId }) => {
+        if (user.tipo !== 'repartidor') return;
 
-  // Repartidor sends location updates
-  // payload { orderId, coords: { latitude, longitude, accuracy, speed } }
-  socket.on('location_update', (payload) => {
-    const { orderId, coords } = payload || {};
-    if (!orderId || !coords) return;
-    // security check: ensure sender is the assigned repartidor for that order
-    // (fast DB check)
-    Orden.findByPk(orderId).then(ord => {
-      if (!ord) return;
-      if (ord.repartidor_id !== user.id) {
-        // not assigned; ignore or optionally send error
-        return;
-      }
-      // broadcast to clients listening to the order
-      io.to(`order:${orderId}`).emit('driver_location', {
-        orderId,
-        repartidorId: user.id,
-        coords,
-        timestamp: Date.now()
-      });
-    }).catch(err => console.error(err));
-  });
+        socket.join(`order:${orderId}`);
 
-  socket.on('stop_tracking', ({ orderId }) => {
-    socket.leave(`order:${orderId}`);
-    io.to(`order:${orderId}`).emit('orden:tracking_stopped', { orderId, repartidorId: user.id });
-  });
+        try {
+            // 1. Buscar la orden en la BD para obtener la dirección de texto
+            const orden = await Orden.findByPk(orderId);
 
-  socket.on('disconnect', () => {
-    console.log('Socket disconnected', user.id);
-  });
+            if (!orden) {
+                console.error(`Orden ${orderId} no encontrada al iniciar tracking`);
+                return;
+            }
+
+            console.log(`Procesando dirección para Orden #${orderId}: ${orden.direccion_entrega}`);
+
+            // 2. GEOCODIFICACIÓN EN TIEMPO REAL
+            // Convertimos la dirección de texto (BD) a lat/lng usando Google Maps API
+            const destinationCoords = await getCoordinatesFromAddress(orden.direccion_entrega);
+
+            // 3. Fallback: Coordenadas por defecto (Lima) si Google falla o no encuentra la dirección
+            const finalCoords = destinationCoords || { latitude: -12.0464, longitude: -77.0428 };
+
+            // 4. Emitir evento "start" INCLUYENDO las coordenadas calculadas
+            // Esto permite que el frontend pinte el marcador de destino sin pedirlo de nuevo
+            io.to(`order:${orderId}`).emit('orden:tracking_started', {
+                orderId,
+                repartidorId: user.id,
+                destination: finalCoords, // <--- Coordenadas calculadas en el backend
+                addressText: orden.direccion_entrega
+            });
+
+            console.log(`Tracking iniciado. Destino calculado: ${JSON.stringify(finalCoords)}`);
+
+        } catch (err) {
+            console.error("Error crítico en start_tracking:", err);
+        }
+    });
+
+    // REPARTIDOR: Actualizar ubicación en tiempo real
+    socket.on('location_update', (payload) => {
+        const { orderId, coords } = payload || {};
+        if (!orderId || !coords) return;
+
+        // Verificación rápida de seguridad
+        Orden.findByPk(orderId).then(ord => {
+            if (!ord) return;
+            if (ord.repartidor_id !== user.id) return; // Solo el repartidor asignado puede actualizar
+
+            // Reenviar ubicación a todos en la sala (Cliente y Sistema)
+            io.to(`order:${orderId}`).emit('driver_location', {
+                orderId,
+                repartidorId: user.id,
+                coords,
+                timestamp: Date.now()
+            });
+        }).catch(err => console.error("Error validando orden socket:", err));
+    });
+
+    // REPARTIDOR: Detener tracking
+    socket.on('stop_tracking', ({ orderId }) => {
+        socket.leave(`order:${orderId}`);
+        io.to(`order:${orderId}`).emit('orden:tracking_stopped', { orderId });
+        console.log(`Tracking detenido orden ${orderId}`);
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Usuario desconectado:', user.id);
+    });
 });
 
-// --- Minimal REST to assign repartidor to an order (cocinero) ---
-app.put('/ordenes/:id/asignar-repartidor', async (req, res) => {
-  try {
-    const orden = await Orden.findByPk(req.params.id);
-    if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
+// --- 5. ENDPOINTS REST ADICIONALES ---
 
-    const { repartidor_id } = req.body;
-    const repartidor = await Usuario.findByPk(repartidor_id);
-    if (!repartidor || repartidor.tipo !== 'repartidor') return res.status(400).json({ error: 'Repartidor inválido' });
+// Endpoint para asignar repartidor (Usado por Cocinero/Admin)
+app.put('/api/orden/:id/asignar-repartidor', async (req, res) => {
+    try {
+        const orden = await Orden.findByPk(req.params.id);
+        if (!orden) return res.status(404).json({ error: 'Orden no encontrada' });
 
-    // update order
-    await orden.update({ repartidor_id, estado: 'asignada' });
+        const { repartidor_id } = req.body;
+        const repartidor = await Usuario.findByPk(repartidor_id);
+        if (!repartidor || repartidor.tipo !== 'repartidor') {
+            return res.status(400).json({ error: 'Repartidor inválido' });
+        }
 
-    // emit event: order assigned (to order room and to the repartidor personal room)
-    io.to(`order:${orden.id}`).emit('orden:asignada', { orderId: orden.id, repartidorId: repartidor_id });
-    io.to(`user:${repartidor_id}`).emit('orden:asignada:personal', { orderId: orden.id });
+        // Actualizar orden
+        await orden.update({ repartidor_id, estado: 'en_camino' });
 
-    return res.json({ message: 'Repartidor asignado', orden });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: err.message });
-  }
+        // Notificar por Socket al cliente y al repartidor
+        io.to(`order:${orden.id}`).emit('orden:asignada', {
+            orderId: orden.id,
+            repartidorId: repartidor_id
+        });
+
+        io.to(`user:${repartidor_id}`).emit('orden:asignada:personal', {
+            orderId: orden.id,
+            orden: orden
+        });
+
+        return res.json({ message: 'Repartidor asignado', orden });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: err.message });
+    }
 });
 
-// --- Example REST: client create order (simplified) ---
-app.post('/ordenes', async (req, res) => {
-  try {
-    const { usuario_id, restaurante_id, items } = req.body;
-    const orden = await Orden.create({ usuario_id, restaurante_id, estado: 'pendiente', total: 0 });
+// --- 6. INICIAR SERVIDOR ---
+const PORT = process.env.PORT || 3000;
 
-    // create ordenDetalle records (assume OrdenDetalle model exists)
-    const detalles = items.map(it => ({ orden_id: orden.id, platillo_id: it.platillo_id, cantidad: it.cantidad }));
-    const { OrdenDetalle } = require('./models');
-    await OrdenDetalle.bulkCreate(detalles);
-
-    // notify cooks maybe: join a restaurant room e.g. restaurant:<id>
-    io.to(`restaurant:${restaurante_id}`).emit('orden:creada', { orderId: orden.id });
-
-    return res.status(201).json({ ordenId: orden.id });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// --- Optional: let cocinero join restaurant room when connecting ---
-/* On socket connection:
-   if user.tipo === 'cocinero' and user.restaurante_id:
-      socket.join(`restaurant:${user.restaurante_id}`)
-*/
-
-server.listen(3000, () => {
-  console.log('Server listening on :3000');
+sequelize.sync({ alter: true }).then(() => {
+    console.log('Base de datos conectada y sincronizada');
+    server.listen(PORT, () => {
+        console.log(`Servidor + Sockets corriendo en puerto ${PORT}`);
+    });
+}).catch(err => {
+    console.error('Error al conectar BD:', err);
 });
