@@ -1,10 +1,10 @@
-const express = require('express');
 const http = require('http');
-const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
-
 require('dotenv').config();
+
+// Importamos la APP configurada desde app.js
+const app = require('./app'); 
 
 // Importar modelos y configuración de DB
 const { sequelize, Orden, Usuario } = require('./models');
@@ -12,21 +12,7 @@ const { sequelize, Orden, Usuario } = require('./models');
 // Importar servicio de Google Maps
 const { getCoordinatesFromAddress } = require('./services/googleMapsService');
 
-// Inicializar App
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// --- RUTAS ---
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/platillos', require('./routes/Platillos'));
-app.use('/api/restaurantes', require('./routes/Restaurantes'));
-app.use('/api/favoritos', require('./routes/favoritos'));
-app.use('/api/metodos-pago', require('./routes/MetodosPagos'));
-app.use('/api/orden', require('./routes/Orden'));
-app.use('/api/usuarios', require('./routes/Usuarios'));
-app.use('/api/direcciones', require('./routes/Direcciones'));
-
+// Creamos el servidor HTTP usando la app de Express
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
@@ -51,7 +37,7 @@ io.use(async (socket, next) => {
 // --- EVENTOS SOCKET ---
 io.on('connection', (socket) => {
     const user = socket.userModel;
-    console.log(`✅Conectado: ${user.nombre} (${user.tipo}) ID:${user.id}`);
+    console.log(`✅ Conectado: ${user.nombre} (${user.tipo}) ID:${user.id}`);
 
     socket.join(`user:${user.id}`);
 
@@ -79,7 +65,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 2. REPARTIDOR: Iniciar Tracking + Geocodificación Mejorada
+    // 2. REPARTIDOR: Iniciar Tracking
     socket.on('start_tracking', async ({ orderId }) => {
         if (user.tipo !== 'repartidor') return;
 
@@ -90,20 +76,15 @@ io.on('connection', (socket) => {
             const roomName = `order_${orderId}`;
             socket.join(roomName);
 
-            // MEJORA DE GEOCODIFICACIÓN ESPECIFICANDO EL PAIS Y DISTRITO
             let searchAddress = orden.direccion_entrega;
             if (!searchAddress.toLowerCase().includes("peru")) {
                 searchAddress += ", Lima, Peru";
             }
 
             console.log(`🤨 Buscando coordenadas para: "${searchAddress}"`);
-
-            // Si Google falla, finalCoords será null
             const finalCoords = await getCoordinatesFromAddress(searchAddress);
-
             console.log(` Destino calculado:`, finalCoords);
 
-            // Avisar a TODOS en la sala (incluido el Repartidor que emitió esto)
             io.to(roomName).emit('orden:tracking_started', {
                 orderId,
                 repartidorId: user.id,
@@ -129,20 +110,13 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => console.log('Desconectado:', user.id));
 });
 
-// --- ENDPOINTS ---
-app.put('/api/orden/:id/asignar-repartidor', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { repartidor_id } = req.body;
-        await Orden.update({ repartidor_id, estado: 'asignada' }, { where: { id } });
-        io.to(`user:${repartidor_id}`).emit('orden:asignada:personal', { orderId: id });
-        res.json({ message: 'Asignado' });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
+// Esto permite usar 'req.app.get('io')' en tus controladores
+app.set('io', io);
 
 const PORT = process.env.PORT || 3000;
+
+// Sincronizar DB y levantar servidor
 sequelize.sync({ alter: true }).then(() => {
-    server.listen(PORT, () => console.log(`Servidor en puerto ${PORT}`));
+    console.log('Base de datos sincronizada');
+    server.listen(PORT, () => console.log(`🚀 Servidor corriendo en puerto ${PORT}`));
 });

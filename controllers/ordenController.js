@@ -90,6 +90,13 @@ exports.crearOrden = async (req, res) => {
             include: [{ model: OrdenDetalle, as: 'detalles' }]
         });
 
+        // --- SOCKET: NOTIFICAR NUEVA ORDEN ---
+        const io = req.app.get('io');
+        if (io) {
+            console.log(`📡 Socket: Nueva orden para restaurante ${restaurante_id_real}`);
+        }
+        // -------------------------------------
+
         res.json({
             message: "Orden creada correctamente",
             orden: ordenCompleta
@@ -101,7 +108,7 @@ exports.crearOrden = async (req, res) => {
     }
 };
 
-// --- RESTO DE FUNCIONES (Sin cambios) ---
+// --- RESTO DE FUNCIONES ---
 
 exports.misOrdenes = async (req, res) => {
     const ordenes = await Orden.findAll({
@@ -147,10 +154,30 @@ exports.asignarRepartidor = async (req, res) => {
     if (!orden) return res.status(404).json({ error: "Orden no encontrada" });
     if (orden.restaurante_id !== req.user.restaurante_id)
         return res.status(403).json({ error: "No puedes editar esta orden" });
+    
     const repartidor = await Usuario.findByPk(req.body.repartidor_id);
     if (!repartidor || repartidor.tipo !== "repartidor")
         return res.status(400).json({ error: "Repartidor inválido" });
+    
     await orden.update({ repartidor_id: req.body.repartidor_id, estado: "asignada" });
+
+    // --- SOCKET INTEGRATION (CRÍTICO) ---
+    // Recuperamos la instancia de IO guardada en server.js con app.set('io', io)
+    const io = req.app.get('io');
+    if (io) {
+        // 1. Notificar al repartidor específico (tal como hacía antes server.js)
+        io.to(`user:${req.body.repartidor_id}`).emit('orden:asignada:personal', { orderId: orden.id });
+        
+        // 2. Notificar a la sala de la orden (para que el cliente vea el cambio en vivo)
+        io.to(`order_${orden.id}`).emit('orden:estado_actualizado', { 
+            orderId: orden.id, 
+            estado: 'asignada',
+            repartidorId: req.body.repartidor_id 
+        });
+        console.log(`📡 Socket: Orden ${orden.id} asignada a repartidor ${req.body.repartidor_id}`);
+    }
+    // ------------------------------------
+
     res.json({ message: "Repartidor asignado", orden });
 };
 
@@ -158,10 +185,25 @@ exports.cambiarEstado = async (req, res) => {
     const { estado } = req.body;
     const estadosValidos = ["pendiente", "asignada", "preparando", "lista", "entregada"];
     if (!estadosValidos.includes(estado)) return res.status(400).json({ error: "Estado inválido" });
+    
     const orden = await Orden.findByPk(req.params.id);
     if (!orden || orden.restaurante_id !== req.user.restaurante_id)
         return res.status(403).json({ error: "No puedes cambiar esta orden" });
+    
     await orden.update({ estado });
+
+    // --- SOCKET INTEGRATION ---
+    const io = req.app.get('io');
+    if (io) {
+
+        io.to(`order_${orden.id}`).emit('orden:estado_actualizado', { 
+            orderId: orden.id, 
+            estado: estado 
+        });
+        console.log(`📡 Socket: Orden ${orden.id} cambió a ${estado}`);
+    }
+    // -------------------------
+
     res.json({ message: "Estado actualizado", orden });
 };
 
@@ -169,10 +211,8 @@ exports.ordenesAsignadas = async (req, res) => {
     try {
         const ordenes = await Orden.findAll({
             where: { repartidor_id: req.user.id },
-
             include: [
                 { model: Usuario, as: "cliente" },
-
                 {
                     model: OrdenDetalle,
                     as: "detalles",
@@ -180,7 +220,6 @@ exports.ordenesAsignadas = async (req, res) => {
                         { model: Platillo, as: "platillo" }
                     ]
                 },
-
                 { model: Restaurante, as: "restaurante" }
             ]
         });
@@ -193,13 +232,26 @@ exports.ordenesAsignadas = async (req, res) => {
     }
 };
 
-
 exports.marcarEntregada = async (req, res) => {
     const orden = await Orden.findByPk(req.params.id);
     if (!orden) return res.status(404).json({ error: "Orden no encontrada" });
     if (orden.repartidor_id !== req.user.id)
         return res.status(403).json({ error: "No puedes modificar esta orden" });
+    
     await orden.update({ estado: "entregada" });
+
+    // --- SOCKET INTEGRATION ---
+    const io = req.app.get('io');
+    if (io) {
+        io.to(`order_${orden.id}`).emit('orden:estado_actualizado', { 
+            orderId: orden.id, 
+            estado: 'entregada' 
+        });
+
+        io.to(`order_${orden.id}`).emit('orden:tracking_stopped', { orderId: orden.id });
+    }
+    // -------------------------
+
     res.json({ message: "Orden entregada", orden });
 };
 
@@ -211,7 +263,19 @@ exports.cancelarOrden = async (req, res) => {
             return res.status(403).json({ error: "No tienes permiso" });
         if (orden.estado === "entregada")
             return res.status(400).json({ error: "Ya fue entregada" });
+        
         await orden.update({ estado: "cancelada" });
+
+        // --- SOCKET INTEGRATION ---
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`order_${orden.id}`).emit('orden:estado_actualizado', { 
+                orderId: orden.id, 
+                estado: 'cancelada' 
+            });
+        }
+        // -------------------------
+
         res.json({ message: "Orden cancelada", orden });
     } catch (err) {
         res.status(500).json({ error: err.message });
