@@ -18,5 +18,6 @@ app.use('/api/metodos-pago', require('./routes/MetodosPagos'));
 app.use('/api/orden', require('./routes/Orden'));
 app.use('/api/usuarios', require('./routes/Usuarios'));
 app.use('/api/direcciones', require('./routes/Direcciones'));
+app.use('/api/admin', require('./routes/Admin'));
 
 module.exports = app;
