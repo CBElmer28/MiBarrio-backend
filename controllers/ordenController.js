@@ -125,15 +125,32 @@ exports.misOrdenes = async (req, res) => {
 };
 
 exports.listarOrdenes = async (req, res) => {
+  try {
     const ordenes = await Orden.findAll({
-        where: { restaurante_id: req.user.restaurante_id },
-        include: [
-            { model: Usuario, as: "cliente" },
-            { model: Usuario, as: "repartidor" },
-            { model: OrdenDetalle, as: "detalles" }
-        ]
+      where: { restaurante_id: req.user.restaurante_id },
+      include: [
+        { model: Usuario, as: "cliente" },
+        { model: Usuario, as: "repartidor" },
+        { 
+          model: OrdenDetalle, 
+          as: "detalles",
+          // 👇 ESTO ES LO NUEVO: Incluimos el Platillo dentro del Detalle
+          include: [
+            {
+              model: Platillo, // Asegúrate de tener importado Platillo arriba
+              as: "platillo"   // Así podremos usar d.platillo.nombre
+            }
+          ]
+        }
+      ],
+      order: [['created_at', 'DESC']] // Opcional: Para ver las más nuevas primero
     });
+
     res.json(ordenes);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
 };
 
 exports.verOrden = async (req, res) => {

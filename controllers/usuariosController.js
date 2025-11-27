@@ -19,7 +19,7 @@ exports.create = async (req, res) => {
       email,
       contraseña: hash,
       tipo: "repartidor",
-      restaurante_id: req.user.restaurante_id
+      restaurante_id: req.user.restaurante_id // Se asigna al restaurante del cocinero
     });
 
     res.json({
@@ -32,45 +32,61 @@ exports.create = async (req, res) => {
   }
 };
 
-
-// 📌 Listar repartidores del restaurante del cocinero
+// 📌 Listar repartidores (Solo los de mi restaurante)
 exports.list = async (req, res) => {
-  const repartidores = await Usuario.findAll({
-    where: {
-      tipo: "repartidor",
-      restaurante_id: req.user.restaurante_id
-    }
-  });
-
-  res.json(repartidores);
+  try {
+    const repartidores = await Usuario.findAll({
+      where: {
+        tipo: "repartidor",
+        restaurante_id: req.user.restaurante_id
+      },
+      attributes: { exclude: ['contraseña'] } // No enviamos la contraseña por seguridad
+    });
+    res.json(repartidores);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
 
-
-// 📌 Actualizar repartidor
+// 📌 Actualizar repartidor (CORREGIDO)
 exports.update = async (req, res) => {
-  const repartidor = await Usuario.findByPk(req.params.id);
+  try {
+    const repartidor = await Usuario.findByPk(req.params.id);
 
-  if (!repartidor || repartidor.restaurante_id !== req.user.restaurante_id)
-    return res.status(403).json({ error: "Acceso denegado" });
+    // Verificar que exista y que sea MI repartidor
+    if (!repartidor || repartidor.restaurante_id !== req.user.restaurante_id)
+      return res.status(403).json({ error: "Acceso denegado" });
 
-  // Evitar cambios peligrosos
-  delete req.body.tipo;
-  delete req.body.restaurante_id;
+    const { nombre, email, contraseña } = req.body;
+    
+    // Preparamos los datos a actualizar
+    const datosUpdate = { nombre, email };
 
-  await repartidor.update(req.body);
+    // Solo encriptamos si viene una contraseña nueva
+    if (contraseña && contraseña.length > 0) {
+        datosUpdate.contraseña = await bcrypt.hash(contraseña, 10);
+    }
 
-  res.json({ message: "Repartidor actualizado", repartidor });
+    await repartidor.update(datosUpdate);
+
+    res.json({ message: "Repartidor actualizado", repartidor });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
-
 
 // 📌 Eliminar repartidor
 exports.delete = async (req, res) => {
-  const repartidor = await Usuario.findByPk(req.params.id);
+  try {
+    const repartidor = await Usuario.findByPk(req.params.id);
 
-  if (!repartidor || repartidor.restaurante_id !== req.user.restaurante_id)
-    return res.status(403).json({ error: "Acceso denegado" });
+    if (!repartidor || repartidor.restaurante_id !== req.user.restaurante_id)
+      return res.status(403).json({ error: "Acceso denegado" });
 
-  await repartidor.destroy();
+    await repartidor.destroy();
 
-  res.json({ message: "Repartidor eliminado" });
+    res.json({ message: "Repartidor eliminado" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
