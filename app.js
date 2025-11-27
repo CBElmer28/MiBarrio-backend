@@ -13,7 +13,7 @@ app.use(express.json());
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/platillos', require('./routes/Platillos'));
 app.use('/api/restaurantes', require('./routes/Restaurantes'));
-app.use('/api/favoritos', require('./routes/favoritos'));
+app.use('/api/favoritos', require('./routes/Favoritos'));
 app.use('/api/metodos-pago', require('./routes/MetodosPagos'));
 app.use('/api/orden', require('./routes/Orden'));
 app.use('/api/usuarios', require('./routes/Usuarios'));
