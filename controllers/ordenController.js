@@ -250,26 +250,43 @@ exports.ordenesAsignadas = async (req, res) => {
 };
 
 exports.marcarEntregada = async (req, res) => {
-    const orden = await Orden.findByPk(req.params.id);
-    if (!orden) return res.status(404).json({ error: "Orden no encontrada" });
-    if (orden.repartidor_id !== req.user.id)
-        return res.status(403).json({ error: "No puedes modificar esta orden" });
-    
-    await orden.update({ estado: "entregada" });
+    try {
+        const orden = await Orden.findByPk(req.params.id);
 
-    // --- SOCKET INTEGRATION ---
-    const io = req.app.get('io');
-    if (io) {
-        io.to(`order_${orden.id}`).emit('orden:estado_actualizado', { 
-            orderId: orden.id, 
-            estado: 'entregada' 
-        });
+        if (!orden) return res.status(404).json({ error: "Orden no encontrada" });
 
-        io.to(`order_${orden.id}`).emit('orden:tracking_stopped', { orderId: orden.id });
+        const esRepartidor = orden.repartidor_id === req.user.id;
+        const esCliente = orden.cliente_id === req.user.id;
+
+        if (!esRepartidor && !esCliente) {
+            return res.status(403).json({ error: "No tienes permiso para finalizar esta orden" });
+        }
+
+        if (orden.estado === 'entregada') {
+            return res.json({ message: "La orden ya estaba entregada", orden });
+        }
+
+        await orden.update({ estado: "entregada" });
+
+        // --- SOCKET INTEGRATION ---
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`order_${orden.id}`).emit('orden:estado_actualizado', {
+                orderId: orden.id,
+                estado: 'entregada',
+                actualizadoPor: esCliente ? 'cliente' : 'repartidor'
+            });
+
+            // Detener el tracking
+            io.to(`order_${orden.id}`).emit('orden:tracking_stopped', { orderId: orden.id });
+        }
+        // -------------------------
+
+        res.json({ message: "Orden entregada con éxito", orden });
+    } catch (err) {
+        console.error("Error al marcar entregada:", err);
+        res.status(500).json({ error: "Error interno del servidor" });
     }
-    // -------------------------
-
-    res.json({ message: "Orden entregada", orden });
 };
 
 exports.cancelarOrden = async (req, res) => {
