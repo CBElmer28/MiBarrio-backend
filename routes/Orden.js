@@ -21,6 +21,6 @@ router.get('/', authCocinero, ordenController.listarOrdenes);
 router.put('/:id/estado', authCocinero, ordenController.cambiarEstado);
 router.put('/:id/asignar-repartidor', authCocinero, ordenController.asignarRepartidor);
 router.delete('/:id', authCocinero, ordenController.cancelarOrden);
-router.put('/:id/entregar', authRepartidor, ordenController.marcarEntregada);
+router.put('/:id/entregar', ordenController.marcarEntregada);
 
 module.exports = router;
